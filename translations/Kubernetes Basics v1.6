@@ -1,0 +1,366 @@
+LAB: Kubernetes Basics v1.6 
+
+
+In this lab, you learn how to:
+
+    Provision a Kubernetes cluster using Google Kubernetes Engine.
+    Deploy and manage Docker containers using kubectl.
+    Split an application into microservices using Kubernetes' Deployments and Services.
+
+
+1. SETUP
+
+    You can list the active account name with this command:
+
+	gcloud auth list
+	Result: Credentialed accounts:
+               - google1623327_student@qwiklabs.net
+
+    You can list the project ID with this command:
+
+	gcloud config list project
+	Result: [core]
+		project = qwiklabs-gcp-44776a13dea667a6
+
+    Get the sample code from the Git repository.
+
+	git clone https://github.com/googlecodelabs/orchestrate-with-kubernetes.git
+
+    Review the app layout.
+
+	cd orchestrate-with-kubernetes/kubernetes
+	ls
+
+A quick demo of Kubernetes
+
+    -Start a Kubernetes cluster
+
+    Define your zone as a project default zone. This way you do not need to specify 
+    --zone parameter in gcloud commands
+
+	gcloud config set compute/zone us-central1-a
+
+     Run the following command to start a Kubernetes cluster called bootcamp that runs 5 nodes.
+
+	gcloud container clusters create bootcamp --num-nodes 5 --scopes 
+        "https://www.googleapis.com/auth/projecthosting,storage-rw"
+
+    After the cluster is created, check your installed version of Kubernetes using the 
+    kubectl  version command.
+
+	kubectl version
+        The gcloud container clusters create command automatically authenticated kubectl for you.
+
+    Use kubectl cluster-info to find out more about the cluster.
+
+	kubectl cluster-info
+
+   Kubernetes comes with auto-completion. You can use the kubectl completion command and the 
+   built-in source command to set this up.
+
+   Run this command.
+	source <(kubectl completion bash)
+
+    Press Tab to display a list of available commands.
+	kubectl <TAB><TAB>
+
+    You can also complete a partial command.
+	kubectl co<TAB><TAB>
+
+Run and display Container
+
+    Use kubectl create deployment to launch a single instance of the nginx container.
+
+	kubectl create deployment nginx --image=nginx:1.10.0
+
+    Use the kubectl get pods command to view the pod running the nginx container.
+
+	kubectl get pods
+
+    Use the kubectl expose command to expose the nginx container outside Kubernetes.
+
+	kubectl expose deployment nginx --port 80 --type LoadBalancer
+
+    Use the kubectl get command to view the new service
+
+	kubectl get services
+
+    Use the kubectl scale command to scale up the number of backend applications (pods) running 
+    on your service using.
+
+	kubectl scale deployment nginx --replicas 3
+
+    Get the pods one more time to confirm that Kubernetes has updated the number of pods.
+
+	kubectl get pods
+
+    Use the kubectl get services command again to confirm that your external IP address has 
+    not  changed.
+
+	kubectl get services
+
+    Use the external IP address with the curl command to test your demo application.
+
+	curl http://<External IP>:80
+
+Clean Up
+
+    Clean up nginx by running the following commands.
+
+2. Pods
+
+    -Creating Pods
+    Explore the built-in pod documentation using the kubectl explain command.
+
+	kubectl explain pods
+    
+    Explore the monolith pod's configuration file
+	
+	cat pods/monolith.yaml
+
+    Use the kubectl explain command with the .spec option to view more information about 
+   API objects. This example inspects containers.
+
+	kubectl explain pods.spec.containers
+
+    Create the monolith pod using kubectl create.
+
+	kubectl create -f pods/monolith.yaml
+
+    Use the kubectl get pods command to list all pods running in the default namespace.
+
+	kubectl get pods
+
+    When the pod is running, use the kubectl describe command to get more information 
+    about the monolith pod.
+
+	kubectl describe pods monolith
+
+Interacting with pods
+
+Use two terminals: one to run the kubectl port-forward command, and the other to issue curl commands.
+
+Click the + button in Cloud Shell to open a new terminal.
+
+    Run the following command to set up port-forwarding from a local port, 10080, 
+    to a pod port, 80 (where your container is listening).
+
+	kubectl port-forward monolith 10080:80
+
+    To access your pod, return to the first terminal window and run the following curl command.
+
+	curl http://127.0.0.1:10080
+	Result: You get a friendly "Hello" back from the container
+
+    See what happens when you hit a secure endpoint.
+
+	curl http://127.0.0.1:10080/secure
+	Result: an error.
+
+    Log in to get an auth token from monolith.
+
+	curl -u user http://127.0.0.1:10080/login
+	At the login prompt, enter the password as password to sign in.
+
+    Access the secure endpoint again, and this time include the auth token.
+
+	curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:10080/secure
+	Result: You should get a response back from your application letting you know it 
+                works  again!
+
+    Use the kubectl logs command to view logs for the monolith pod.
+
+	kubectl logs monolith
+
+Open another terminal and use the -f flag to get a stream of logs in real-time!
+
+    Run the following command.
+
+	kubectl logs -f monolith
+
+    Use curl in terminal 1 to interact with monolith. And you see logs update in terminal 3.
+
+	curl http://127.0.0.1:10080
+	Result: you can seelogs updating back in terminal 3
+
+    Use the kubectl exec command to run an interactive shell inside the monolith pod. 
+    This can be useful when you want to troubleshoot from within a container.
+
+	kubectl exec monolith --stdin --tty -c monolith /bin/sh
+
+    Optional: In the shell, you can test external (outward facing) connectivity using 
+    the ping command
+
+	ping -c 3 google.com
+
+    Sign out of the shell
+
+	exit
+
+    To quit kubectl port-forward and kubectl logs in terminal 2 and 3
+
+	ctrl+c
+
+3. Monitoring and Health Checks
+
+    -Creating Pods with Liveness and Readiness Probes
+
+    Explore the healthy-monolith pod configuration file.
+
+	cat pods/healthy-monolith.yaml
+
+    Create the healthy-monolith pod using kubectl.
+
+	kubectl create -f pods/healthy-monolith.yaml
+
+    Pods are not marked ready until the readiness probe returns an HTTP 200 response. 
+    Use the kubectl describe command to view details for the healthy-monolith pod.
+
+	kubectl describe pod healthy-monolith
+
+    -Readiness Probes
+
+    Use the kubectl port-forward command in terminal 2 to forward a local port to the health 
+    port of the healthy-monolith pod.
+
+	kubectl port-forward healthy-monolith 10081:81
+
+    Force the monolith container readiness probe to fail. Use the curl command in terminal 1 
+    to toggle the readiness probe status. Note that this command does not show any output.
+
+	curl http://127.0.0.1:10081/readiness/status
+
+    Get the status of the healthy-monolith pod using the kubectl get pods -w command.
+
+	kubectl get pods healthy-monolith -w
+
+    Press Ctrl+C when there are 0/1 ready containers. Use the kubectl describe command to get 
+    more details about the failing readiness probe.
+
+	kubectl describe pods healthy-monolith
+
+    To force the monolith container readiness probe to pass, toggle the readiness probe status
+    by using the curl command.
+
+	curl http://127.0.0.1:10081/readiness/status
+
+    Wait about 15 seconds and get the status of the healthy-monolith pod using the kubectl 
+    get pods command.
+
+	kubectl get pods healthy-monolith
+
+    Press Ctrl+C in terminal 2 to close the kubectl proxy (i.e port-forward) command.
+
+    -Liveness Probes
+
+    Use the kubectl port-forward command to forward a local port to the health port of the 
+    healthy-monolith pod in terminal 2.
+
+	kubectl port-forward healthy-monolith 10081:81
+
+    To force the monolith container readiness probe to pass, toggle the readiness probe 
+    status by using the curl command in another terminal.
+
+	curl http://127.0.0.1:10081/healthz/status
+
+    Get the status of the healthy-monolith pod using the kubectl get pods -w command.
+
+	kubectl get pods healthy-monolith -w
+
+    When a liveness probe fails, the container is restarted. Once restarted, 
+    the healthy-monolith pod should return to a healthy state. Press Ctrl+C to exit 
+    that command when the pod restarts. Note the restart count.
+
+    Use the kubectl describe command to get more details about the failing liveness probe. 
+    You can see the related events for when the liveness probe failed and the pod was restarted.
+
+	kubectl describe pods healthy-monolith
+
+    When you are finished, press Ctrl+C in terminal 2 to close the kubectl proxy command.
+
+    -Creating a Service
+
+    Return to terminal 1 and create the first volume using the following command:
+
+	kubectl create secret generic tls-certs --from-file tls/
+
+    Create the second volume of type ConfigMap to hold nginx's configuration file.
+
+	kubectl create configmap nginx-proxy-conf --from-file nginx/proxy.conf
+
+    Explore the proxy.conf file that nginx will use.
+
+	cat nginx/proxy.conf
+
+    Explore the secure-monolith pod configuration file.
+
+	cat pods/secure-monolith.yaml
+
+    Run the following command to create the secure-monolith pod with its configuration data
+
+	kubectl create -f pods/secure-monolith.yaml
+
+    Explore the monolith service configuration file.
+
+	cat services/monolith.yaml
+
+    Use the kubectl create command to create the monolith service from the monolith 
+    service configuration file.
+
+	kubectl create -f services/monolith.yaml
+
+    Use the gcloud compute firewall-rules command to allow traffic to the monolith service 
+    on the exposed nodeport.
+
+	gcloud compute firewall-rules create allow-monolith-nodeport --allow=tcp:31000
+
+    Get an IP address for one of your nodes.
+
+	gcloud compute instances list
+
+    Try to open the URL in your browser.
+
+	https://<EXTERNAL_IP>:31000
+	Result: That timed out or refused to connect
+
+    -Adding Labels to Pods
+
+    Determine that there are several pods running with the monolith label.
+
+	kubectl get pods -l "app=monolith"
+
+    But what about app=monolith and secure=enabled?
+
+	kubectl get pods -l "app=monolith,secure=enabled"
+	add "secure=enabled" to label them
+
+    Use the kubectl label command to add the missing secure=enabled label to the 
+    secure-monolith pod.
+
+	kubectl label pods secure-monolith 'secure=enabled'
+
+    Check to see that your labels are updated.
+
+	kubectl get pods secure-monolith --show-labels
+
+    View the list of endpoints on the monolith service.
+
+	kubectl get endpoints monolith
+	Result: And you have one!
+
+    Test this by testing one of your nodes again.
+
+	gcloud compute instances list | grep gke-
+
+    Open the following URL in your browser. You will need to click through the SSL 
+    warning because secure-monolith is using a self-signed certificate.
+
+	https://<EXTERNAL_IP>:31000
+
+
+
+
+
+
+
+
